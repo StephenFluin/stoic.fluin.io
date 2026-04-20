@@ -39,6 +39,16 @@ interface Meditation {
     </div>
   `,
   styles: [`
+    :host {
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 1.5rem;
+    }
+
     .app-brand {
       font-family: 'Inter', -apple-system, sans-serif;
       text-transform: uppercase;
