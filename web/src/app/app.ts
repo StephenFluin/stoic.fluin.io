@@ -7,6 +7,7 @@ import { getMessaging, getToken } from 'firebase/messaging';
 
 interface Meditation {
   day_of_year: number;
+  theme: string;
   meditation: string;
   description: string;
 }
@@ -186,7 +187,7 @@ export class App {
         console.log("FCM Token:", token);
         
         // Post to server
-        this.http.post('http://localhost:3000/api/register', { token }).subscribe({
+        this.http.post('/api/register', { token }).subscribe({
           next: () => alert("Successfully subscribed to daily meditations!"),
           error: (err) => alert("Token generated, but Failed to save to server.")
         });

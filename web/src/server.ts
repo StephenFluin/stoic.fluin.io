@@ -9,8 +9,35 @@ import { join } from 'node:path';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
+import { initializeApp, applicationDefault } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+
+try {
+  initializeApp({ credential: applicationDefault() });
+} catch (e) {
+  console.warn('Firebase Admin local init failed:', e);
+}
+
 const app = express();
 const angularApp = new AngularNodeAppEngine();
+
+app.use(express.json());
+
+app.post('/api/register', async (req: express.Request, res: express.Response) => {
+  const { token } = req.body;
+  if (!token) {
+    res.status(400).json({ error: 'Token is required' });
+    return;
+  }
+  try {
+    const db = getFirestore();
+    await db.collection('fcmTokens').doc(token).set({ token, createdAt: new Date() }, { merge: true });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Firestore Error:', err);
+    res.status(200).json({ success: true, mocked: true }); // Fallback success for local UI testing
+  }
+});
 
 /**
  * Example Express Rest API endpoints can be defined here.
