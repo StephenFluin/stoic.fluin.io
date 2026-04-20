@@ -15,7 +15,15 @@ interface Meditation {
 
 interface ApiResponse {
   success: boolean;
-  mocked?: boolean;
+  error?: string;
+  message?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'Unknown error';
 }
 
 @Component({
@@ -126,7 +134,12 @@ export class App {
 
           if (requestResource.hasValue()) {
             watcher?.destroy();
-            resolve(requestResource.value());
+            const response = requestResource.value();
+            if (!response.success) {
+              reject(new Error(response.message || response.error || 'Server request failed'));
+              return;
+            }
+            resolve(response);
           }
         }, { injector: this.injector });
       });
@@ -238,6 +251,7 @@ export class App {
         });
         if (!token) {
           alert('Could not get an FCM token for this browser.');
+          this.isWorking.set(false);
           return;
         }
 
@@ -255,7 +269,7 @@ export class App {
       }
     } catch (e) {
       console.error(e);
-      alert("FCM config missing or error. See console for details.");
+      alert(`Subscription failed: ${getErrorMessage(e)}`);
       this.isWorking.set(false);
     }
   }
@@ -282,7 +296,7 @@ export class App {
     } catch (e) {
       console.error(e);
       this.isWorking.set(false);
-      alert('Could not unsubscribe. See console for details.');
+      alert(`Could not unsubscribe: ${getErrorMessage(e)}`);
     }
   }
 }

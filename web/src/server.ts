@@ -12,31 +12,30 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
+const projectId = process.env['GOOGLE_CLOUD_PROJECT'] || process.env['GCLOUD_PROJECT'] || 'stoic-fluin-io';
+const isGoogleRuntime = Boolean(process.env['K_SERVICE'] || process.env['GAE_ENV'] || process.env['FUNCTION_TARGET']);
+const shouldPreferEmulator = !isGoogleRuntime && process.env['FIRESTORE_USE_EMULATOR'] !== 'false';
+
+if (shouldPreferEmulator && !process.env['FIRESTORE_EMULATOR_HOST']) {
+  process.env['FIRESTORE_EMULATOR_HOST'] = '127.0.0.1:8081';
+}
+
+const firestoreMode = process.env['FIRESTORE_EMULATOR_HOST']
+  ? `emulator(${process.env['FIRESTORE_EMULATOR_HOST']})`
+  : (isGoogleRuntime ? 'google-runtime-workload-identity' : 'local-adc');
+
 try {
   if (!getApps().length) {
-    const projectIdFromGoogleCloudProject = process.env['GOOGLE_CLOUD_PROJECT'];
-    const projectIdFromGcloudProject = process.env['GCLOUD_PROJECT'];
-    const projectId =
-      projectIdFromGoogleCloudProject ||
-      projectIdFromGcloudProject ||
-      'stoic-fluin-io';
-    const projectIdSource = projectIdFromGoogleCloudProject
-      ? 'GOOGLE_CLOUD_PROJECT'
-      : projectIdFromGcloudProject
-        ? 'GCLOUD_PROJECT'
-        : 'hardcoded fallback';
-
-    console.info(`[Firebase Admin] Initializing with projectId="${projectId}" (source: ${projectIdSource})`);
-
-    initializeApp({
-      credential: applicationDefault(),
-      projectId,
-    });
+    console.info(`[Firebase Admin] Initializing Firestore with projectId="${projectId}" mode=${firestoreMode}`);
+    const options = process.env['FIRESTORE_EMULATOR_HOST']
+      ? { projectId }
+      : { projectId, credential: applicationDefault() };
+    initializeApp(options);
   } else {
     console.info('[Firebase Admin] Reusing existing initialized app instance.');
   }
 } catch (e) {
-  console.warn('Firebase Admin local init failed:', e);
+  console.warn('[Firebase Admin] Initialization failed:', e);
 }
 
 const app = express();
@@ -54,26 +53,69 @@ function getValidToken(value: unknown): string | null {
   return token;
 }
 
+let hasLoggedMissingAdcHint = false;
+
+function isMissingAdcError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Could not load the default credentials');
+}
+
+function isEmulatorUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message;
+  return message.includes('ECONNREFUSED') || message.includes('14 UNAVAILABLE');
+}
+
+function handleFirestoreError(error: unknown, res: express.Response): void {
+  if (process.env['FIRESTORE_EMULATOR_HOST'] && isEmulatorUnavailableError(error)) {
+    console.error('[Firestore] Emulator unavailable:', error);
+    res.status(503).json({
+      success: false,
+      error: 'firestore-emulator-unavailable',
+      message: `Could not reach Firestore emulator at ${process.env['FIRESTORE_EMULATOR_HOST']}. Start it with: firebase emulators:start --only firestore`,
+    });
+    return;
+  }
+
+  if (isMissingAdcError(error)) {
+    if (!hasLoggedMissingAdcHint) {
+      hasLoggedMissingAdcHint = true;
+      console.warn('[Firestore] Missing Application Default Credentials. Either run `gcloud auth application-default login` or set FIRESTORE_USE_EMULATOR=true and run `firebase emulators:start --only firestore`.');
+    }
+
+    res.status(503).json({
+      success: false,
+      error: 'missing-application-default-credentials',
+      message: 'Server is missing Google Application Default Credentials.',
+    });
+    return;
+  }
+
+  console.error('Firestore Error:', error);
+  res.status(500).json({
+    success: false,
+    error: 'firestore-operation-failed',
+  });
+}
+
 app.post('/api/register', async (req: express.Request, res: express.Response) => {
   const token = getValidToken(req.body?.token);
   if (!token) {
-    res.status(400).json({ error: 'A valid token is required' });
+    res.status(400).json({ success: false, error: 'invalid-token', message: 'A valid token is required' });
     return;
   }
   try {
     const db = getFirestore();
     await db.collection('fcmTokens').doc(token).set({ token, createdAt: new Date() }, { merge: true });
     res.json({ success: true });
-  } catch (err: any) {
-    console.error('Firestore Error:', err);
-    res.status(200).json({ success: true, mocked: true }); // Fallback success for local UI testing
+  } catch (err: unknown) {
+    handleFirestoreError(err, res);
   }
 });
 
 app.post('/api/unregister', async (req: express.Request, res: express.Response) => {
   const token = getValidToken(req.body?.token);
   if (!token) {
-    res.status(400).json({ error: 'A valid token is required' });
+    res.status(400).json({ success: false, error: 'invalid-token', message: 'A valid token is required' });
     return;
   }
 
@@ -81,9 +123,8 @@ app.post('/api/unregister', async (req: express.Request, res: express.Response) 
     const db = getFirestore();
     await db.collection('fcmTokens').doc(token).delete();
     res.json({ success: true });
-  } catch (err: any) {
-    console.error('Firestore Error:', err);
-    res.status(200).json({ success: true, mocked: true }); // Fallback success for local UI testing
+  } catch (err: unknown) {
+    handleFirestoreError(err, res);
   }
 });
 

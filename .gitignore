@@ -15,6 +15,15 @@ dist/
 .vscode/
 .idea/
 .DS_Store
-
+    
 # Environments
 .env
+
+# Debug logs
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
