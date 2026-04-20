@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "serve:ssr:stoic.fluin.io": "node dist/stoic.fluin.io/server/server.mjs"
+    "serve:ssr:stoic.fluin.io": "node dist/stoic.fluin.io/server/server.mjs",
+    "cap:sync": "npx cap sync"
   },
   "private": true,
   "packageManager": "npm@11.12.1",
@@ -19,7 +20,13 @@
     "@angular/platform-server": "^22.0.0-next.0",
     "@angular/router": "^22.0.0-next.0",
     "@angular/ssr": "^22.0.0-next.5",
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/push-notifications": "^8.0.3",
+    "@types/marked": "^5.0.2",
     "express": "^5.1.0",
+    "firebase": "^12.12.0",
+    "marked": "^18.0.2",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -27,6 +34,7 @@
     "@angular/build": "^22.0.0-next.5",
     "@angular/cli": "^22.0.0-next.5",
     "@angular/compiler-cli": "^22.0.0-next.0",
+    "@capacitor/cli": "^8.3.1",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
     "prettier": "^3.8.1",

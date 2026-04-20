@@ -1,0 +1,14 @@
+{
+  "name": "stoic-meditations",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm --prefix web run start\" \"npm --prefix server run dev\"",
+    "build": "npm --prefix web run build && npm --prefix web run cap:sync",
+    "cap:sync": "npm --prefix web run cap:sync",
+    "install:all": "npm install && npm --prefix web install && npm --prefix server install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

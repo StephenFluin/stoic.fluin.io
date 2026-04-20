@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Mobile (Capacitor)
+android/
+**/android/
+
+# Builds
+dist/
+**/dist/
+.angular/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Environments
+.env
