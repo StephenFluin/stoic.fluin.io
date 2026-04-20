@@ -9,11 +9,32 @@ import { join } from 'node:path';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
-import { initializeApp, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 try {
-  initializeApp({ credential: applicationDefault() });
+  if (!getApps().length) {
+    const projectIdFromGoogleCloudProject = process.env['GOOGLE_CLOUD_PROJECT'];
+    const projectIdFromGcloudProject = process.env['GCLOUD_PROJECT'];
+    const projectId =
+      projectIdFromGoogleCloudProject ||
+      projectIdFromGcloudProject ||
+      'stoic-fluin-io';
+    const projectIdSource = projectIdFromGoogleCloudProject
+      ? 'GOOGLE_CLOUD_PROJECT'
+      : projectIdFromGcloudProject
+        ? 'GCLOUD_PROJECT'
+        : 'hardcoded fallback';
+
+    console.info(`[Firebase Admin] Initializing with projectId="${projectId}" (source: ${projectIdSource})`);
+
+    initializeApp({
+      credential: applicationDefault(),
+      projectId,
+    });
+  } else {
+    console.info('[Firebase Admin] Reusing existing initialized app instance.');
+  }
 } catch (e) {
   console.warn('Firebase Admin local init failed:', e);
 }

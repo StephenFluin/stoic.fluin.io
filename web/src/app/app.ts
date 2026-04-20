@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { marked } from 'marked';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken } from 'firebase/messaging';
+import { firebaseWebConfig, firebaseWebVapidKey } from './firebase.config';
 
 interface Meditation {
   day_of_year: number;
@@ -179,21 +180,17 @@ export class App {
   async subscribe() {
     if (!isPlatformBrowser(this.platformId)) return;
     try {
-      // Firebase placeholder config
-      const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
-      };
-      const app = initializeApp(firebaseConfig);
+      const app = initializeApp(firebaseWebConfig);
       const messaging = getMessaging(app);
+
+      if (!firebaseWebVapidKey.trim()) {
+        alert('Missing FCM VAPID key. Set firebaseWebVapidKey in src/app/firebase.config.ts from Firebase Console > Cloud Messaging > Web configuration.');
+        return;
+      }
       
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        const token = await getToken(messaging, { vapidKey: 'YOUR_VAPID_KEY' });
+        const token = await getToken(messaging, { vapidKey: firebaseWebVapidKey });
         console.log("FCM Token:", token);
         
         // Post to server
