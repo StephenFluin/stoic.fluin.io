@@ -7,7 +7,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "serve:ssr:stoic.fluin.io": "node dist/stoic.fluin.io/server/server.mjs",
-    "cap:sync": "npx cap sync"
+    "cap:sync": "npx cap sync",
+    "test-message": "node ./scripts/test-message.mjs"
   },
   "private": true,
   "packageManager": "npm@11.12.1",

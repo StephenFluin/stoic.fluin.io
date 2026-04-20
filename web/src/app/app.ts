@@ -2,8 +2,8 @@ import { Component, PLATFORM_ID, Inject, signal, computed } from '@angular/core'
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { marked } from 'marked';
-import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken } from 'firebase/messaging';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { deleteToken, getMessaging, getToken } from 'firebase/messaging';
 import { firebaseWebConfig, firebaseWebVapidKey } from './firebase.config';
 
 interface Meditation {
@@ -30,7 +30,11 @@ interface Meditation {
         <div class="description" [innerHTML]="parsedDescription()"></div>
         
         <div class="actions">
-          <button class="primary-btn" (click)="subscribe()">Get these daily</button>
+          @if (!isSubscribed()) {
+            <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
+          } @else {
+            <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
+          }
         </div>
       } @else {
         <div class="loading">
@@ -118,6 +122,27 @@ interface Meditation {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(56, 189, 248, 0.6);
     }
+    .secondary-btn {
+      background: transparent;
+      color: var(--text-primary);
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 1rem 2rem;
+      border-radius: 50px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border: 1px solid var(--glass-border);
+    }
+    .secondary-btn:hover {
+      background: var(--glass-border);
+      transform: translateY(-2px);
+    }
+    .primary-btn:disabled,
+    .secondary-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
     .loading {
       text-align: center;
       padding: 2rem;
@@ -125,8 +150,12 @@ interface Meditation {
   `]
 })
 export class App {
+  private static readonly tokenStorageKey = 'fcmToken';
+
   meditations = signal<Meditation[]>([]);
   currentDay = signal<number>(this.getInitialDay());
+  isSubscribed = signal<boolean>(false);
+  isWorking = signal<boolean>(false);
   
   currentDateDisplay = computed(() => {
     const targetDate = new Date(new Date().getFullYear(), 0, this.currentDay());
@@ -159,6 +188,50 @@ export class App {
         console.error('Could not load meditations', err);
       }
     });
+
+    if (isPlatformBrowser(this.platformId)) {
+      void this.syncSubscriptionState();
+    }
+  }
+
+  private getMessagingClient() {
+    if (!firebaseWebVapidKey.trim()) {
+      throw new Error('Missing FCM VAPID key');
+    }
+
+    const app = getApps().length ? getApp() : initializeApp(firebaseWebConfig);
+    return getMessaging(app);
+  }
+
+  private getStoredToken(): string {
+    if (!isPlatformBrowser(this.platformId)) return '';
+    return localStorage.getItem(App.tokenStorageKey) || '';
+  }
+
+  private setStoredToken(token: string): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (!token) {
+      localStorage.removeItem(App.tokenStorageKey);
+      return;
+    }
+    localStorage.setItem(App.tokenStorageKey, token);
+  }
+
+  private async syncSubscriptionState(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId) || Notification.permission !== 'granted') {
+      this.isSubscribed.set(false);
+      return;
+    }
+
+    try {
+      const messaging = this.getMessagingClient();
+      const token = await getToken(messaging, { vapidKey: firebaseWebVapidKey });
+      this.setStoredToken(token || '');
+      this.isSubscribed.set(!!token);
+    } catch (e) {
+      console.error('Could not determine current FCM subscription state:', e);
+      this.isSubscribed.set(!!this.getStoredToken());
+    }
   }
 
   getInitialDay(): number {
@@ -179,31 +252,85 @@ export class App {
 
   async subscribe() {
     if (!isPlatformBrowser(this.platformId)) return;
-    try {
-      const app = initializeApp(firebaseWebConfig);
-      const messaging = getMessaging(app);
+    if (this.isSubscribed() || this.isWorking()) return;
 
-      if (!firebaseWebVapidKey.trim()) {
-        alert('Missing FCM VAPID key. Set firebaseWebVapidKey in src/app/firebase.config.ts from Firebase Console > Cloud Messaging > Web configuration.');
-        return;
-      }
+    this.isWorking.set(true);
+    try {
+      const messaging = this.getMessagingClient();
       
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         const token = await getToken(messaging, { vapidKey: firebaseWebVapidKey });
+        if (!token) {
+          alert('Could not get an FCM token for this browser.');
+          return;
+        }
+
+        this.setStoredToken(token);
         console.log("FCM Token:", token);
         
         // Post to server
         this.http.post('/api/register', { token }).subscribe({
-          next: () => alert("Successfully subscribed to daily meditations!"),
-          error: (err) => alert("Token generated, but Failed to save to server.")
+          next: () => {
+            this.isSubscribed.set(true);
+            this.isWorking.set(false);
+            alert("Successfully subscribed to daily meditations!");
+          },
+          error: () => {
+            this.isSubscribed.set(false);
+            this.isWorking.set(false);
+            alert("Token generated, but failed to save to server.");
+          }
         });
       } else {
+        this.isSubscribed.set(false);
         alert("Permission denied");
+        this.isWorking.set(false);
       }
     } catch (e) {
       console.error(e);
       alert("FCM config missing or error. See console for details.");
+      this.isWorking.set(false);
+    }
+  }
+
+  async unsubscribe() {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (!this.isSubscribed() || this.isWorking()) return;
+
+    this.isWorking.set(true);
+    const storedToken = this.getStoredToken();
+
+    try {
+      const messaging = this.getMessagingClient();
+      await deleteToken(messaging);
+
+      if (storedToken) {
+        this.http.post('/api/unregister', { token: storedToken }).subscribe({
+          next: () => {
+            this.setStoredToken('');
+            this.isSubscribed.set(false);
+            this.isWorking.set(false);
+            alert('You are unsubscribed from daily meditations.');
+          },
+          error: () => {
+            this.setStoredToken('');
+            this.isSubscribed.set(false);
+            this.isWorking.set(false);
+            alert('Device unsubscribed, but failed to remove server token.');
+          }
+        });
+        return;
+      }
+
+      this.setStoredToken('');
+      this.isSubscribed.set(false);
+      this.isWorking.set(false);
+      alert('You are unsubscribed from daily meditations.');
+    } catch (e) {
+      console.error(e);
+      this.isWorking.set(false);
+      alert('Could not unsubscribe. See console for details.');
     }
   }
 }
