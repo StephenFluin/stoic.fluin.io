@@ -44,10 +44,20 @@ const angularApp = new AngularNodeAppEngine();
 
 app.use(express.json());
 
+function getValidToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const token = value.trim();
+  if (!token) return null;
+  // FCM tokens are long URL-safe-ish strings; enforce reasonable bounds.
+  if (token.length < 20 || token.length > 4096) return null;
+  if (!/^[A-Za-z0-9:_\-\.]+$/.test(token)) return null;
+  return token;
+}
+
 app.post('/api/register', async (req: express.Request, res: express.Response) => {
-  const { token } = req.body;
+  const token = getValidToken(req.body?.token);
   if (!token) {
-    res.status(400).json({ error: 'Token is required' });
+    res.status(400).json({ error: 'A valid token is required' });
     return;
   }
   try {
@@ -61,9 +71,9 @@ app.post('/api/register', async (req: express.Request, res: express.Response) =>
 });
 
 app.post('/api/unregister', async (req: express.Request, res: express.Response) => {
-  const { token } = req.body;
+  const token = getValidToken(req.body?.token);
   if (!token) {
-    res.status(400).json({ error: 'Token is required' });
+    res.status(400).json({ error: 'A valid token is required' });
     return;
   }
 

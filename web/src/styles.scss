@@ -52,3 +52,125 @@ button {
   max-width: 600px;
   width: 90%;
 }
+
+app-root {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+
+  .app-brand {
+    font-family: 'Inter', -apple-system, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    opacity: 0.7;
+    text-align: center;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .date-display {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  button {
+    font-size: 1.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    outline: none;
+  }
+
+  button:hover {
+    background: var(--glass-border);
+  }
+
+  .title {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .description {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 3rem;
+  }
+
+  .description em {
+    color: var(--text-primary);
+    font-style: italic;
+  }
+
+  .description p {
+    margin-bottom: 1rem;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: center;
+  }
+
+  .primary-btn {
+    background: var(--accent-color);
+    color: #000;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+  }
+
+  .primary-btn:hover {
+    background: var(--accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.6);
+  }
+
+  .secondary-btn {
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: 1px solid var(--glass-border);
+  }
+
+  .secondary-btn:hover {
+    background: var(--glass-border);
+    transform: translateY(-2px);
+  }
+
+  .primary-btn:disabled,
+  .secondary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 2rem;
+  }
+}

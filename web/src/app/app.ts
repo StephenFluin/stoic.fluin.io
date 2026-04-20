@@ -1,6 +1,6 @@
-import { Component, PLATFORM_ID, Inject, signal, computed } from '@angular/core';
+import { Component, PLATFORM_ID, Inject, Injector, effect, inject, signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { httpResource } from '@angular/common/http';
 import { marked } from 'marked';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { deleteToken, getMessaging, getToken } from 'firebase/messaging';
@@ -11,6 +11,11 @@ interface Meditation {
   theme: string;
   meditation: string;
   description: string;
+}
+
+interface ApiResponse {
+  success: boolean;
+  mocked?: boolean;
 }
 
 @Component({
@@ -42,117 +47,19 @@ interface Meditation {
         </div>
       }
     </div>
-  `,
-  styles: [`
-    :host {
-      min-height: 100vh;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 1.5rem;
-    }
-
-    .app-brand {
-      font-family: 'Inter', -apple-system, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: 4px;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      margin-bottom: 2rem;
-      opacity: 0.7;
-      text-align: center;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
-    }
-    .date-display {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: var(--accent-color);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-    button {
-      font-size: 1.5rem;
-      padding: 0.5rem 1rem;
-      border-radius: 12px;
-      outline: none;
-    }
-    button:hover {
-      background: var(--glass-border);
-    }
-    .title {
-      font-family: 'Playfair Display', serif;
-      font-size: 2.5rem;
-      margin-bottom: 1.5rem;
-      line-height: 1.2;
-    }
-    .description {
-      font-size: 1.1rem;
-      line-height: 1.7;
-      color: var(--text-secondary);
-      margin-bottom: 3rem;
-    }
-    /* Provide styles for injected markdown HTML */
-    ::ng-deep .description em { color: var(--text-primary); font-style: italic; }
-    ::ng-deep .description p { margin-bottom: 1rem; }
-    
-    .actions {
-      display: flex;
-      justify-content: center;
-    }
-    .primary-btn {
-      background: var(--accent-color);
-      color: #000;
-      font-size: 1rem;
-      font-weight: 600;
-      padding: 1rem 2rem;
-      border-radius: 50px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
-    }
-    .primary-btn:hover {
-      background: var(--accent-hover);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(56, 189, 248, 0.6);
-    }
-    .secondary-btn {
-      background: transparent;
-      color: var(--text-primary);
-      font-size: 1rem;
-      font-weight: 600;
-      padding: 1rem 2rem;
-      border-radius: 50px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      border: 1px solid var(--glass-border);
-    }
-    .secondary-btn:hover {
-      background: var(--glass-border);
-      transform: translateY(-2px);
-    }
-    .primary-btn:disabled,
-    .secondary-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-    }
-    .loading {
-      text-align: center;
-      padding: 2rem;
-    }
-  `]
+  `
 })
 export class App {
   private static readonly tokenStorageKey = 'fcmToken';
 
-  meditations = signal<Meditation[]>([]);
+  private readonly injector = inject(Injector);
+  private messagingSwRegistration: ServiceWorkerRegistration | null = null;
+  private readonly meditationsResource = httpResource<Meditation[]>(
+    () => '/meditations.json',
+    { defaultValue: [] }
+  );
+
+  meditations = computed(() => this.meditationsResource.value());
   currentDay = signal<number>(this.getInitialDay());
   isSubscribed = signal<boolean>(false);
   isWorking = signal<boolean>(false);
@@ -179,18 +86,52 @@ export class App {
     return med ? marked.parse(med.description) : '';
   });
 
-  constructor(private http: HttpClient, @Inject(PLATFORM_ID) private platformId: Object) {
-    this.http.get<Meditation[]>('/meditations.json').subscribe({
-      next: (data) => {
-        this.meditations.set(data);
-      },
-      error: (err) => {
+  constructor(@Inject(PLATFORM_ID) private platformId: Object) {
+    effect(() => {
+      const err = this.meditationsResource.error();
+      if (err) {
         console.error('Could not load meditations', err);
       }
     });
 
     if (isPlatformBrowser(this.platformId)) {
       void this.syncSubscriptionState();
+    }
+  }
+
+  private async postWithResource(url: string, body: unknown): Promise<ApiResponse> {
+    const requestResource = httpResource<ApiResponse>(
+      () => ({
+        url,
+        method: 'POST',
+        body,
+      }),
+      { injector: this.injector }
+    );
+
+    try {
+      return await new Promise<ApiResponse>((resolve, reject) => {
+        let watcher: { destroy: () => void } | undefined;
+        watcher = effect(() => {
+          if (requestResource.isLoading()) {
+            return;
+          }
+
+          const error = requestResource.error();
+          if (error) {
+            watcher?.destroy();
+            reject(error);
+            return;
+          }
+
+          if (requestResource.hasValue()) {
+            watcher?.destroy();
+            resolve(requestResource.value());
+          }
+        }, { injector: this.injector });
+      });
+    } finally {
+      requestResource.destroy();
     }
   }
 
@@ -201,6 +142,32 @@ export class App {
 
     const app = getApps().length ? getApp() : initializeApp(firebaseWebConfig);
     return getMessaging(app);
+  }
+
+  private async getMessagingServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+    if (!isPlatformBrowser(this.platformId)) {
+      throw new Error('Service workers are only available in the browser');
+    }
+
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service workers are not supported by this browser');
+    }
+
+    if (this.messagingSwRegistration) {
+      return this.messagingSwRegistration;
+    }
+
+    const existing = await navigator.serviceWorker.getRegistration('/firebase-cloud-messaging-push-scope');
+    if (existing) {
+      this.messagingSwRegistration = existing;
+      return existing;
+    }
+
+    const registered = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      scope: '/firebase-cloud-messaging-push-scope',
+    });
+    this.messagingSwRegistration = registered;
+    return registered;
   }
 
   private getStoredToken(): string {
@@ -225,7 +192,11 @@ export class App {
 
     try {
       const messaging = this.getMessagingClient();
-      const token = await getToken(messaging, { vapidKey: firebaseWebVapidKey });
+      const serviceWorkerRegistration = await this.getMessagingServiceWorkerRegistration();
+      const token = await getToken(messaging, {
+        vapidKey: firebaseWebVapidKey,
+        serviceWorkerRegistration,
+      });
       this.setStoredToken(token || '');
       this.isSubscribed.set(!!token);
     } catch (e) {
@@ -257,10 +228,14 @@ export class App {
     this.isWorking.set(true);
     try {
       const messaging = this.getMessagingClient();
+      const serviceWorkerRegistration = await this.getMessagingServiceWorkerRegistration();
       
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        const token = await getToken(messaging, { vapidKey: firebaseWebVapidKey });
+        const token = await getToken(messaging, {
+          vapidKey: firebaseWebVapidKey,
+          serviceWorkerRegistration,
+        });
         if (!token) {
           alert('Could not get an FCM token for this browser.');
           return;
@@ -268,20 +243,11 @@ export class App {
 
         this.setStoredToken(token);
         console.log("FCM Token:", token);
-        
-        // Post to server
-        this.http.post('/api/register', { token }).subscribe({
-          next: () => {
-            this.isSubscribed.set(true);
-            this.isWorking.set(false);
-            alert("Successfully subscribed to daily meditations!");
-          },
-          error: () => {
-            this.isSubscribed.set(false);
-            this.isWorking.set(false);
-            alert("Token generated, but failed to save to server.");
-          }
-        });
+
+        await this.postWithResource('/api/register', { token });
+        this.isSubscribed.set(true);
+        this.isWorking.set(false);
+        alert("Successfully subscribed to daily meditations!");
       } else {
         this.isSubscribed.set(false);
         alert("Permission denied");
@@ -306,21 +272,7 @@ export class App {
       await deleteToken(messaging);
 
       if (storedToken) {
-        this.http.post('/api/unregister', { token: storedToken }).subscribe({
-          next: () => {
-            this.setStoredToken('');
-            this.isSubscribed.set(false);
-            this.isWorking.set(false);
-            alert('You are unsubscribed from daily meditations.');
-          },
-          error: () => {
-            this.setStoredToken('');
-            this.isSubscribed.set(false);
-            this.isWorking.set(false);
-            alert('Device unsubscribed, but failed to remove server token.');
-          }
-        });
-        return;
+        await this.postWithResource('/api/unregister', { token: storedToken });
       }
 
       this.setStoredToken('');
