@@ -140,7 +140,7 @@ export class App {
   });
 
   constructor(private http: HttpClient, @Inject(PLATFORM_ID) private platformId: Object) {
-    this.http.get<Meditation[]>('/assets/meditations.json').subscribe({
+    this.http.get<Meditation[]>('/meditations.json').subscribe({
       next: (data) => {
         this.meditations.set(data);
       },
