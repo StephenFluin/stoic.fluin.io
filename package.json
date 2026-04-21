@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "npm --prefix web run start",
     "build": "npm --prefix web run build && npm --prefix web run cap:sync",
+    "android:sync": "npm --prefix web run android:sync",
+    "android:run": "npm --prefix web run android:run",
+    "android:dev": "npm --prefix web run android:dev",
+    "android:open": "npm --prefix web run cap:open:android",
     "install:all": "npm install && npm --prefix web install && npm --prefix functions install"
   }
 }

@@ -8,6 +8,10 @@
     "watch": "ng build --watch --configuration development",
     "serve:ssr:stoic.fluin.io": "node dist/stoic.fluin.io/server/server.mjs",
     "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:run": "npm run android:sync && npx cap run android",
+    "android:dev": "npx cap run android -l",
     "test-message": "node ./scripts/test-message.mjs"
   },
   "private": true,
