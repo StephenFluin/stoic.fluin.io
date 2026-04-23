@@ -144,18 +144,28 @@ export class MeditationComponent {
     });
 
     if (isPlatformBrowser(this.platformId)) {
-      effect(() => {
-        const date = this.currentDate();
-        const prev = new Date(date);
-        const next = new Date(date);
-        prev.setDate(prev.getDate() - 1);
-        next.setDate(next.getDate() + 1);
+      this.scheduleAfterIdle(() => {
+        effect(() => {
+          const date = this.currentDate();
+          const prev = new Date(date);
+          const next = new Date(date);
+          prev.setDate(prev.getDate() - 1);
+          next.setDate(next.getDate() + 1);
 
-        void this.prefetchMeditation(this.formatDate(prev));
-        void this.prefetchMeditation(this.formatDate(next));
+          void this.prefetchMeditation(this.formatDate(prev));
+          void this.prefetchMeditation(this.formatDate(next));
+        }, { injector: this.injector });
       });
 
       void this.syncSubscriptionState();
+    }
+  }
+
+  private scheduleAfterIdle(callback: () => void): void {
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(callback, { timeout: 2000 });
+    } else {
+      setTimeout(callback, 200);
     }
   }
 
