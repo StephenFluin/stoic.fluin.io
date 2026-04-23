@@ -80,12 +80,16 @@ export class AnalyticsService {
 
     this.scriptLoaded = true;
     window.dataLayer = window.dataLayer || [];
-    window.gtag = (...args: unknown[]) => {
-      window.dataLayer.push(args);
+    // Must use a classic function with `arguments` — gtag.js checks instanceof IArguments
+    // to distinguish commands from other dataLayer entries. Arrow functions don't have `arguments`.
+    const gtag: (...args: unknown[]) => void = function () {
+      // eslint-disable-next-line prefer-rest-params
+      window.dataLayer.push(arguments);
     };
+    window.gtag = gtag;
 
-    window.gtag('js', new Date());
-    window.gtag('config', firebaseAnalyticsMeasurementId, {
+    gtag('js', new Date());
+    gtag('config', firebaseAnalyticsMeasurementId, {
       send_page_view: false,
       transport_type: 'beacon',
     });
