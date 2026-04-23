@@ -59,6 +59,7 @@ export class MeditationComponent {
   private readonly router = inject(Router);
   private messagingSwRegistration: ServiceWorkerRegistration | null = null;
   private readonly meditationCache = new Map<string, Meditation>();
+  private readonly prefetchInFlight = new Set<string>();
   private readonly meditationRequest = computed(() => {
     const date = this.currentDateDisplay();
     if (this.meditationCache.has(date)) {
@@ -123,7 +124,47 @@ export class MeditationComponent {
     });
 
     if (isPlatformBrowser(this.platformId)) {
+      effect(() => {
+        const date = this.currentDate();
+        const prev = new Date(date);
+        const next = new Date(date);
+        prev.setDate(prev.getDate() - 1);
+        next.setDate(next.getDate() + 1);
+
+        void this.prefetchMeditation(this.formatDate(prev));
+        void this.prefetchMeditation(this.formatDate(next));
+      });
+
       void this.syncSubscriptionState();
+    }
+  }
+
+  private async prefetchMeditation(date: string): Promise<void> {
+    if (this.meditationCache.has(date) || this.prefetchInFlight.has(date)) {
+      return;
+    }
+
+    this.prefetchInFlight.add(date);
+    try {
+      const response = await fetch(`/api/meditation?date=${encodeURIComponent(date)}`);
+      if (!response.ok) {
+        return;
+      }
+
+      const meditation = await response.json() as Meditation;
+      if (
+        typeof meditation?.day_of_year !== 'number' ||
+        typeof meditation?.meditation !== 'string' ||
+        typeof meditation?.description !== 'string'
+      ) {
+        return;
+      }
+
+      this.meditationCache.set(date, meditation);
+    } catch {
+      // Prefetch is best-effort; no user-facing error needed.
+    } finally {
+      this.prefetchInFlight.delete(date);
     }
   }
 
