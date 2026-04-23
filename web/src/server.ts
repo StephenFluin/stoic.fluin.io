@@ -11,6 +11,11 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { BatchResponse, SendResponse, getMessaging } from 'firebase-admin/messaging';
+import {
+  getMeditationForDate,
+} from './shared/meditations';
+import { MEDITATIONS } from './shared/meditations.data';
 
 const projectId = process.env['GOOGLE_CLOUD_PROJECT'] || process.env['GCLOUD_PROJECT'] || 'stoic-fluin-io';
 const isGoogleRuntime = Boolean(process.env['K_SERVICE'] || process.env['GAE_ENV'] || process.env['FUNCTION_TARGET']);
@@ -51,6 +56,53 @@ function getValidToken(value: unknown): string | null {
   if (token.length < 20 || token.length > 4096) return null;
   if (!/^[A-Za-z0-9:_\-\.]+$/.test(token)) return null;
   return token;
+}
+
+function parseApiDateParam(value: unknown): Date | null {
+  if (value === undefined) {
+    return new Date();
+  }
+
+  if (Array.isArray(value) || typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function getInvalidTokens(tokens: string[], result: BatchResponse): string[] {
+  const invalidCodes = new Set([
+    'messaging/registration-token-not-registered',
+    'messaging/invalid-registration-token',
+  ]);
+
+  return result.responses.flatMap((response: SendResponse, index: number) => {
+    const code = response.error?.code;
+    if (response.success || !code || !invalidCodes.has(code)) {
+      return [];
+    }
+    return [tokens[index]];
+  });
 }
 
 let hasLoggedMissingAdcHint = false;
@@ -97,6 +149,29 @@ function handleFirestoreError(error: unknown, res: express.Response): void {
   });
 }
 
+app.get('/api/meditation', (req: express.Request, res: express.Response) => {
+  const targetDate = parseApiDateParam(req.query['date']);
+  if (!targetDate) {
+    res.status(400).json({
+      success: false,
+      error: 'invalid-date',
+      message: 'Use date format YYYY-MM-DD.',
+    });
+    return;
+  }
+
+  const meditation = getMeditationForDate(MEDITATIONS, targetDate, { timeZone: 'America/Chicago' });
+  if (!meditation) {
+    res.status(404).json({
+      success: false,
+      error: 'meditation-not-found',
+    });
+    return;
+  }
+
+  res.json(meditation);
+});
+
 app.post('/api/register', async (req: express.Request, res: express.Response) => {
   const token = getValidToken(req.body?.token);
   if (!token) {
@@ -123,6 +198,96 @@ app.post('/api/unregister', async (req: express.Request, res: express.Response) 
     const db = getFirestore();
     await db.collection('fcmTokens').doc(token).delete();
     res.json({ success: true });
+  } catch (err: unknown) {
+    handleFirestoreError(err, res);
+  }
+});
+
+app.post('/api/scheduler/push', async (req: express.Request, res: express.Response) => {
+  const expectedSecret = process.env['SCHEDULER_SECRET']?.trim() || '';
+  const providedSecret = req.get('x-scheduler-secret')?.trim() || '';
+
+  if (!expectedSecret) {
+    res.status(500).json({
+      success: false,
+      error: 'scheduler-auth-not-configured',
+      message: 'SCHEDULER_SECRET must be configured.',
+    });
+    return;
+  }
+
+  if (providedSecret !== expectedSecret) {
+    res.status(401).json({
+      success: false,
+      error: 'unauthorized',
+      message: 'Invalid scheduler secret.',
+    });
+    return;
+  }
+
+  const link = 'https://stoic.fluin.io/';
+
+  try {
+    const todayMeditation = getMeditationForDate(MEDITATIONS, new Date(), { timeZone: 'America/Chicago' });
+    if (!todayMeditation) {
+      throw new Error('No meditation found for current date.');
+    }
+
+    const title = todayMeditation.meditation;
+    const body = todayMeditation.description;
+    const db = getFirestore();
+    const snapshot = await db.collection('fcmTokens').get();
+    const tokens = snapshot.docs
+      .map((doc) => doc.get('token') || doc.id)
+      .filter((value): value is string => getValidToken(value) !== null);
+
+    if (!tokens.length) {
+      res.json({ success: true, sent: 0, failed: 0, totalTokens: 0, pruned: 0 });
+      return;
+    }
+
+    let sent = 0;
+    let failed = 0;
+    const invalidTokens: string[] = [];
+
+    for (let index = 0; index < tokens.length; index += 500) {
+      const tokenBatch = tokens.slice(index, index + 500);
+      const result = await getMessaging().sendEachForMulticast({
+        tokens: tokenBatch,
+        notification: { title, body },
+        data: {
+          type: 'daily-meditation',
+          link,
+        },
+        webpush: {
+          fcmOptions: { link },
+        },
+      });
+
+      sent += result.successCount;
+      failed += result.failureCount;
+      invalidTokens.push(...getInvalidTokens(tokenBatch, result));
+    }
+
+    if (invalidTokens.length) {
+      const uniqueInvalidTokens = [...new Set(invalidTokens)];
+      for (let index = 0; index < uniqueInvalidTokens.length; index += 450) {
+        const deleteBatch = uniqueInvalidTokens.slice(index, index + 450);
+        const writeBatch = db.batch();
+        for (const token of deleteBatch) {
+          writeBatch.delete(db.collection('fcmTokens').doc(token));
+        }
+        await writeBatch.commit();
+      }
+    }
+
+    res.json({
+      success: true,
+      sent,
+      failed,
+      totalTokens: tokens.length,
+      pruned: invalidTokens.length,
+    });
   } catch (err: unknown) {
     handleFirestoreError(err, res);
   }

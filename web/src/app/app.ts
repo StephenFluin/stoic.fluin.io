@@ -5,13 +5,9 @@ import { marked } from 'marked';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { deleteToken, getMessaging, getToken } from 'firebase/messaging';
 import { firebaseWebConfig, firebaseWebVapidKey } from './firebase.config';
-
-interface Meditation {
-  day_of_year: number;
-  theme: string;
-  meditation: string;
-  description: string;
-}
+import {
+  Meditation,
+} from '../shared/meditations';
 
 interface ApiResponse {
   success: boolean;
@@ -61,18 +57,25 @@ export class App {
 
   private readonly injector = inject(Injector);
   private messagingSwRegistration: ServiceWorkerRegistration | null = null;
-  private readonly meditationsResource = httpResource<Meditation[]>(
-    () => '/meditations.json',
-    { defaultValue: [] }
+  private readonly meditationCache = new Map<string, Meditation>();
+  private readonly meditationRequest = computed(() => {
+    const date = this.currentDateDisplay();
+    if (this.meditationCache.has(date)) {
+      return undefined;
+    }
+    return `/api/meditation?date=${encodeURIComponent(date)}`;
+  });
+  private readonly meditationResource = httpResource<Meditation | null>(
+    () => this.meditationRequest(),
+    { defaultValue: null }
   );
 
-  meditations = computed(() => this.meditationsResource.value());
-  currentDay = signal<number>(this.getInitialDay());
+  currentDate = signal<Date>(new Date());
   isSubscribed = signal<boolean>(false);
   isWorking = signal<boolean>(false);
   
   currentDateDisplay = computed(() => {
-    const targetDate = new Date(new Date().getFullYear(), 0, this.currentDay());
+    const targetDate = this.currentDate();
     const yyyy = targetDate.getFullYear();
     const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
     const dd = String(targetDate.getDate()).padStart(2, '0');
@@ -80,11 +83,8 @@ export class App {
   });
   
   currentMeditation = computed(() => {
-    const meds = this.meditations();
-    if (meds.length === 0) return null;
-    // Attempt to find today's exact meditation. If not found, show arbitrary fallback to prevent blank screen.
-    // For a real app, you would probably want to find the nearest previous quote.
-    return meds.find(m => m.day_of_year === this.currentDay()) || meds[0];
+    const date = this.currentDateDisplay();
+    return this.meditationCache.get(date) || this.meditationResource.value();
   });
   
   parsedDescription = computed(() => {
@@ -95,9 +95,18 @@ export class App {
 
   constructor(@Inject(PLATFORM_ID) private platformId: Object) {
     effect(() => {
-      const err = this.meditationsResource.error();
+      const meditation = this.meditationResource.value();
+      if (!meditation) {
+        return;
+      }
+
+      this.meditationCache.set(this.currentDateDisplay(), meditation);
+    });
+
+    effect(() => {
+      const err = this.meditationResource.error();
       if (err) {
-        console.error('Could not load meditations', err);
+        console.error('Could not load meditation', err);
       }
     });
 
@@ -217,20 +226,20 @@ export class App {
     }
   }
 
-  getInitialDay(): number {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0); // Dec 31
-    const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
-    const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
-  }
-
   prevDay() {
-    this.currentDay.update(d => (d <= 0 ? 365 : d - 1));
+    this.currentDate.update((date) => {
+      const next = new Date(date);
+      next.setDate(next.getDate() - 1);
+      return next;
+    });
   }
 
   nextDay() {
-    this.currentDay.update(d => (d >= 365 ? 0 : d + 1));
+    this.currentDate.update((date) => {
+      const next = new Date(date);
+      next.setDate(next.getDate() + 1);
+      return next;
+    });
   }
 
   async subscribe() {

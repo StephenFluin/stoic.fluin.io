@@ -1,3 +1,6 @@
+import { Meditation } from './meditations';
+
+export const MEDITATIONS: Meditation[] =
 [
   {
     "day_of_year": 1,
@@ -2191,4 +2194,4 @@
     "meditation": "Embrace the cyclical nature of life with a courageous heart",
     "description": "Marcus Aurelius reminded himself that \"everything has always been the same, and keeps recurring.\" The end of the year is just a point on a circle. Modern 'resilience' is the ability to maintain one's center as the wheel turns. Practical advice: As the year ends, take one final deep breath. Release the need for things to have gone differently. Welcome the coming year not as a series of events to be feared, but as a series of opportunities for virtue. This is the ultimate Stoic renewal."
   }
-]
+];
