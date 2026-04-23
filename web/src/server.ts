@@ -4,6 +4,7 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
+import compression from 'compression';
 import express from 'express';
 import { join } from 'node:path';
 
@@ -46,6 +47,7 @@ try {
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
+app.use(compression());
 app.use(express.json());
 
 function getValidToken(value: unknown): string | null {

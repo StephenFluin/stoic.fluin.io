@@ -2,6 +2,7 @@ import { Component, PLATFORM_ID, Inject, Injector, effect, inject, signal, compu
 import { isPlatformBrowser } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { NavigationEnd, Router } from '@angular/router';
+import { Meta, Title } from '@angular/platform-browser';
 import { marked } from 'marked';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { deleteToken, getMessaging, getToken } from 'firebase/messaging';
@@ -26,29 +27,31 @@ function getErrorMessage(error: unknown): string {
   standalone: true,
   template: `
     <button type="button" class="app-brand app-brand-button" (click)="goToToday()">Meditations</button>
-    <div class="glass-panel">
-      @if (currentMeditation()) {
-        <div class="header">
-          <button (click)="prevDay()">&#8592;</button>
-          <div class="date-display">{{ currentDateDisplay() }}</div>
-          <button (click)="nextDay()">&#8594;</button>
-        </div>
+    <main aria-label="Daily meditation content">
+      <div class="glass-panel">
+        @if (currentMeditation()) {
+          <div class="header">
+            <button (click)="prevDay()">&#8592;</button>
+            <div class="date-display">{{ currentDateDisplay() }}</div>
+            <button (click)="nextDay()">&#8594;</button>
+          </div>
 
-        <h1 class="title">{{ currentMeditation()?.meditation }}</h1>
-        <div class="description" [innerHTML]="parsedDescription()"></div>
-      } @else {
-        <div class="loading">
-          <p>Loading meditations...</p>
-        </div>
-      }
-    </div>
-    <div class="actions">
-      @if (!isSubscribed()) {
-        <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
-      } @else {
-        <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
-      }
-    </div>
+          <h1 class="title">{{ currentMeditation()?.meditation }}</h1>
+          <div class="description" [innerHTML]="parsedDescription()"></div>
+        } @else {
+          <div class="loading">
+            <p>Loading meditations...</p>
+          </div>
+        }
+      </div>
+      <div class="actions">
+        @if (!isSubscribed()) {
+          <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
+        } @else {
+          <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
+        }
+      </div>
+    </main>
   `,
 })
 export class MeditationComponent {
@@ -57,6 +60,8 @@ export class MeditationComponent {
 
   private readonly injector = inject(Injector);
   private readonly router = inject(Router);
+  private readonly meta = inject(Meta);
+  private readonly title = inject(Title);
   private messagingSwRegistration: ServiceWorkerRegistration | null = null;
   private readonly meditationCache = new Map<string, Meditation>();
   private readonly prefetchInFlight = new Set<string>();
@@ -109,6 +114,21 @@ export class MeditationComponent {
       if (err) {
         console.error('Could not load meditation', err);
       }
+    });
+
+    effect(() => {
+      const meditation = this.currentMeditation();
+      if (!meditation) {
+        return;
+      }
+
+      const dateLabel = this.currentDateDisplay();
+      const description = this.buildMetaDescription(meditation);
+      this.title.setTitle(`${meditation.meditation} | Daily Stoic Meditations`);
+      this.meta.updateTag({
+        name: 'description',
+        content: `${dateLabel}: ${description}`,
+      });
     });
 
     this.router.events.subscribe((event) => {
@@ -199,6 +219,19 @@ export class MeditationComponent {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private buildMetaDescription(meditation: Meditation): string {
+    const plain = `${meditation.meditation}. ${meditation.description}`
+      .replace(/\*+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (plain.length <= 160) {
+      return plain;
+    }
+
+    return `${plain.slice(0, 157).trimEnd()}...`;
   }
 
   private async postWithResource(url: string, body: unknown): Promise<ApiResponse> {
