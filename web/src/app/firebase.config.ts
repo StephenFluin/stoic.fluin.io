@@ -9,5 +9,7 @@ export const firebaseWebConfig: FirebaseOptions = {
   appId: '1:1092484326500:web:caef6ab7f5ee215c59ab71',
 };
 
+export const firebaseAnalyticsMeasurementId = 'G-LKG8C6YFN2';
+
 // Get this from Firebase Console > Project settings > Cloud Messaging > Web configuration.
 export const firebaseWebVapidKey: string = 'BO04jjlp6mLeY7V_p6xlQl894Cuu7ie2Q3ICxCXNpuyc1Q3O29JgCzGg-hKyOScTpJfA-n8oAbk_ouSgJaLG_Uc';
