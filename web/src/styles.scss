@@ -73,6 +73,13 @@ app-root {
     text-align: center;
   }
 
+  .app-brand-button {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
   .header {
     display: flex;
     justify-content: space-between;
@@ -174,4 +181,13 @@ app-root {
     text-align: center;
     padding: 2rem;
   }
+}
+
+app-meditation {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
