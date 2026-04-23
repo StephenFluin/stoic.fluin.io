@@ -191,3 +191,17 @@ app-meditation {
   justify-content: center;
   align-items: center;
 }
+
+@media (max-width: 640px) {
+  app-root,
+  app-meditation {
+    padding: 0.5rem;
+  }
+
+  .glass-panel {
+    width: 100%;
+    max-width: none;
+    padding: 1.25rem;
+    border-radius: 18px;
+  }
+}
