@@ -41,18 +41,17 @@ function getErrorMessage(error: unknown): string {
         
         <h1 class="title">{{ currentMeditation()?.meditation }}</h1>
         <div class="description" [innerHTML]="parsedDescription()"></div>
-        
-        <div class="actions">
-          @if (!isSubscribed()) {
-            <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
-          } @else {
-            <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
-          }
-        </div>
       } @else {
         <div class="loading">
           <p>Loading meditations...</p>
         </div>
+      }
+    </div>
+    <div class="actions">
+      @if (!isSubscribed()) {
+        <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
+      } @else {
+        <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
       }
     </div>
   `
