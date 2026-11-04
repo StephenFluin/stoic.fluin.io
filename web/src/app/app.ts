@@ -6,7 +6,7 @@ import { AnalyticsService } from './analytics.service';
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet],
-  template: `<router-outlet />`
+  template: `<router-outlet />`,
 })
 export class App {
   private readonly analytics = inject(AnalyticsService);

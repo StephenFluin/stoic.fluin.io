@@ -1,4 +1,13 @@
-import { Component, PLATFORM_ID, Inject, Injector, effect, inject, signal, computed } from '@angular/core';
+import {
+  Component,
+  PLATFORM_ID,
+  Inject,
+  Injector,
+  effect,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { NavigationEnd, Router } from '@angular/router';
@@ -26,7 +35,9 @@ function getErrorMessage(error: unknown): string {
   selector: 'app-meditation',
   standalone: true,
   template: `
-    <button type="button" class="app-brand app-brand-button" (click)="goToToday()">Meditations</button>
+    <button type="button" class="app-brand app-brand-button" (click)="goToToday()">
+      Meditations
+    </button>
     <main aria-label="Daily meditation content">
       <div class="glass-panel">
         @if (currentMeditation()) {
@@ -46,9 +57,13 @@ function getErrorMessage(error: unknown): string {
       </div>
       <div class="actions">
         @if (!isSubscribed()) {
-          <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">Get these daily</button>
+          <button class="primary-btn" [disabled]="isWorking()" (click)="subscribe()">
+            Get these daily
+          </button>
         } @else {
-          <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">Unsubscribe</button>
+          <button class="secondary-btn" [disabled]="isWorking()" (click)="unsubscribe()">
+            Unsubscribe
+          </button>
         }
       </div>
     </main>
@@ -74,7 +89,7 @@ export class MeditationComponent {
   });
   private readonly meditationResource = httpResource<Meditation | null>(
     () => this.meditationRequest(),
-    { defaultValue: null }
+    { defaultValue: null },
   );
 
   currentDate = signal<Date>(this.getInitialDateFromPath(this.router.url) || new Date());
@@ -145,16 +160,19 @@ export class MeditationComponent {
 
     if (isPlatformBrowser(this.platformId)) {
       this.scheduleAfterIdle(() => {
-        effect(() => {
-          const date = this.currentDate();
-          const prev = new Date(date);
-          const next = new Date(date);
-          prev.setDate(prev.getDate() - 1);
-          next.setDate(next.getDate() + 1);
+        effect(
+          () => {
+            const date = this.currentDate();
+            const prev = new Date(date);
+            const next = new Date(date);
+            prev.setDate(prev.getDate() - 1);
+            next.setDate(next.getDate() + 1);
 
-          void this.prefetchMeditation(this.formatDate(prev));
-          void this.prefetchMeditation(this.formatDate(next));
-        }, { injector: this.injector });
+            void this.prefetchMeditation(this.formatDate(prev));
+            void this.prefetchMeditation(this.formatDate(next));
+          },
+          { injector: this.injector },
+        );
       });
 
       void this.syncSubscriptionState();
@@ -181,7 +199,7 @@ export class MeditationComponent {
         return;
       }
 
-      const meditation = await response.json() as Meditation;
+      const meditation = (await response.json()) as Meditation;
       if (
         typeof meditation?.day_of_year !== 'number' ||
         typeof meditation?.meditation !== 'string' ||
@@ -251,34 +269,37 @@ export class MeditationComponent {
         method: 'POST',
         body,
       }),
-      { injector: this.injector }
+      { injector: this.injector },
     );
 
     try {
       return await new Promise<ApiResponse>((resolve, reject) => {
         let watcher: { destroy: () => void } | undefined;
-        watcher = effect(() => {
-          if (requestResource.isLoading()) {
-            return;
-          }
-
-          const error = requestResource.error();
-          if (error) {
-            watcher?.destroy();
-            reject(error);
-            return;
-          }
-
-          if (requestResource.hasValue()) {
-            watcher?.destroy();
-            const response = requestResource.value();
-            if (!response.success) {
-              reject(new Error(response.message || response.error || 'Server request failed'));
+        watcher = effect(
+          () => {
+            if (requestResource.isLoading()) {
               return;
             }
-            resolve(response);
-          }
-        }, { injector: this.injector });
+
+            const error = requestResource.error();
+            if (error) {
+              watcher?.destroy();
+              reject(error);
+              return;
+            }
+
+            if (requestResource.hasValue()) {
+              watcher?.destroy();
+              const response = requestResource.value();
+              if (!response.success) {
+                reject(new Error(response.message || response.error || 'Server request failed'));
+                return;
+              }
+              resolve(response);
+            }
+          },
+          { injector: this.injector },
+        );
       });
     } finally {
       requestResource.destroy();
@@ -307,7 +328,9 @@ export class MeditationComponent {
       return this.messagingSwRegistration;
     }
 
-    const existing = await navigator.serviceWorker.getRegistration('/firebase-cloud-messaging-push-scope');
+    const existing = await navigator.serviceWorker.getRegistration(
+      '/firebase-cloud-messaging-push-scope',
+    );
     if (existing) {
       this.messagingSwRegistration = existing;
       return existing;
